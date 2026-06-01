@@ -1,0 +1,24 @@
+---
+title: "Final Exam"
+author: "Steven Todd McIntyre II"
+format: 
+  html:
+    code-fold: true
+    embed-resources: true
+
+---
+Dependencies
+```{r}
+library(tidyverse)
+library(purrr)
+library(httr)
+library()
+```
+
+# (1) API calls to chess.com (10 points)
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+```{r}
+1 + 1
+```
