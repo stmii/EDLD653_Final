@@ -20,11 +20,13 @@ library(knitr)
 library(kableExtra)
 library(here)
 library(rio)
+library(lme4)
 ```
 
 # (1) API calls to chess.com (10 points)
 
 ```{r}
+#| eval: false
 response <- GET('https://api.chess.com/pub/country/US/players')
 
 player_list <- fromJSON(rawToChar(response$content))$players
@@ -75,11 +77,13 @@ x
 
 # (2) Identify & Remove Duplicate Files (20 points)
 ```{r}
+# make df to store duplicate file names
 summ_deleted <- tibble(
   retained = character(),
   deleted_dup = character()
 )
 
+# find file names
 file_names <- list.files(
   here("data"), 
   include.dirs = FALSE,
@@ -87,6 +91,7 @@ file_names <- list.files(
   full.names = TRUE
 )
 
+# add content
 file_contents <- tibble(file_names) |>
   rowwise() |>
   mutate(
@@ -94,7 +99,11 @@ file_contents <- tibble(file_names) |>
   ) |> 
   ungroup()
 
-for(i in 1:length(file_contents$file_names)){
+# find and record duplicates
+# 
+# i almost tried to learn how to use a hashmap for this for efficiency, but
+# that's outside the scope of this class and, anyway, n=222 is pretty small
+for(i in 1:length(file_contents$file_names)-1){
   for(j in (i+1):length(file_contents$file_names)){
     if(identical(file_contents$contents[i], file_contents$contents[j])) {
       summ_deleted <- summ_deleted |>
@@ -106,12 +115,57 @@ for(i in 1:length(file_contents$file_names)){
   }
 }
 
-row_number(summ_deleted)
+map(summ_deleted$deleted_dup, file.remove)
+summ_deleted
 ```
 
 # (3) Multiple Models (10 points)
+```{r}
+benchmarks <- import(here("benchmarks.csv"))
+
+# section borrowed from lab 2
+benchmarks <- benchmarks |>
+    as_tibble() |>
+    mutate(wave = case_when(
+                  season == "fall" ~ 0,
+                  season == "winter" ~ 1,
+                  season == "spring" ~ 2
+                )
+  )
+
+slope_reliability <- benchmarks |>
+  pivot_longer(cols = c("math", "reading"), names_to = "subject", values_to = "score") |>
+  group_by(grade, subject) |>
+  nest() |>
+  mutate(
+    tsv_mods = map(data, ~lmer(score ~ 1 + wave + (1+wave|sid), REML = FALSE, data=.x)),
+    # this line adapted from Gemini with the prompt: "how to extract the variance of the slope; 
+    # that is, the variance of the random effect of wave from a lme4 model"
+    tsv = map_dbl(tsv_mods, ~VarCorr(.x)$sid["wave", "wave"]),
+    osv = map_dbl(data, ~ {
+      temp <- .x |>
+        group_by(sid) |>
+        nest() |>
+        mutate(
+          mods = map(data, ~lm(score ~ 1+ wave, data = .x)),
+          coefs = map(mods, coef),
+          slope = map_dbl(coefs, ~.x[["wave"]])
+        )
+      var(temp$slope)
+        
+    }),
+    slope_reliability_estimate = tsv/osv
+    
+  )
+
+slope_reliability |>
+  select("grade", "subject", "slope_reliability_estimate")
+```
 
 # (4) Slope Reliability Function (10 points)
+```{r}
+
+```
 
 # (5) 95% Confidence Interval (CI) (20 points)
 
