@@ -165,6 +165,53 @@ slope_reliability |>
 # (4) Slope Reliability Function (10 points)
 ```{r}
 
+get_sr <- function(lmer_mod) {
+  df <- lmer_mod |>
+    model.frame()
+  
+  # to generalize, I asked ChatGPT how retrieve the "wave", "score" and "sid" 
+  # values from a generalized model object, assuming 1 slope and grouping factor:
+  # https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65
+  vc <- VarCorr(lmer_mod)[[1]] # assuming one grouping factor
+  slope_name <- setdiff(rownames(vc), "(Intercept)") # or "wave" in our example
+  resp_var <- all.vars(formula(lmer_mod))[1]  # or "score" in our example
+  grouping_fact <- names(getME(lmer_mod, "flist")) # or "sid" in our example
+
+  tsv <- vc[slope_name, slope_name]
+  
+  # chatGPT recommended doing this, since directly substituting
+  # strings didn't work in the lm call below
+  # https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65
+  lm_f <- as.formula(paste0(resp_var, " ~ 1+ ", slope_name))
+  
+  osv_df <- df |>
+    # asked ChatGPT how to group_by a string object's value:
+    # https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65
+    group_by(across(all_of(grouping_fact))) |> 
+    nest() |>
+    mutate(
+      mods = map(data, ~lm(lm_f, data = .x)),
+      coefs = map(mods, coef),
+      slope = map_dbl(coefs, ~.x[[slope_name]])
+    )
+  
+  osv <- var(osv_df$slope)
+
+  return(tsv/osv)
+}
+
+test <- slope_reliability |>
+  mutate(
+    function_test_slope_reliability_estimate = map_dbl(tsv_mods, get_sr)
+  ) |>
+  select(
+    "grade",
+    "subject",
+    "slope_reliability_estimate",
+    "function_test_slope_reliability_estimate"
+)
+
+test
 ```
 
 # (5) 95% Confidence Interval (CI) (20 points)

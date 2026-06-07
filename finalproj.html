@@ -3688,6 +3688,65 @@ window.onload = function() {
 </section>
 <section id="slope-reliability-function-10-points" class="level1">
 <h1>(4) Slope Reliability Function (10 points)</h1>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>get_sr <span class="ot">&lt;-</span> <span class="cf">function</span>(lmer_mod) {</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> lmer_mod <span class="sc">|&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">model.frame</span>()</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="co"># to generalize, I asked ChatGPT how retrieve the &quot;wave&quot;, &quot;score&quot; and &quot;sid&quot; </span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="co"># values from a generalized model object, assuming 1 slope and grouping factor:</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  vc <span class="ot">&lt;-</span> <span class="fu">VarCorr</span>(lmer_mod)[[<span class="dv">1</span>]] <span class="co"># assuming one grouping factor</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  slope_name <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">rownames</span>(vc), <span class="st">&quot;(Intercept)&quot;</span>) <span class="co"># or &quot;wave&quot; in our example</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  resp_var <span class="ot">&lt;-</span> <span class="fu">all.vars</span>(<span class="fu">formula</span>(lmer_mod))[<span class="dv">1</span>]  <span class="co"># or &quot;score&quot; in our example</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>  grouping_fact <span class="ot">&lt;-</span> <span class="fu">names</span>(<span class="fu">getME</span>(lmer_mod, <span class="st">&quot;flist&quot;</span>)) <span class="co"># or &quot;sid&quot; in our example</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  tsv <span class="ot">&lt;-</span> vc[slope_name, slope_name]</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="co"># chatGPT recommended doing this, since directly substituting</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  <span class="co"># strings didn&#39;t work in the lm call below</span></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>  <span class="co"># https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>  lm_f <span class="ot">&lt;-</span> <span class="fu">as.formula</span>(<span class="fu">paste0</span>(resp_var, <span class="st">&quot; ~ 1+ &quot;</span>, slope_name))</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  osv_df <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># asked ChatGPT how to group_by a string object&#39;s value:</span></span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65</span></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(<span class="fu">across</span>(<span class="fu">all_of</span>(grouping_fact))) <span class="sc">|&gt;</span> </span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="fu">nest</span>() <span class="sc">|&gt;</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>      <span class="at">mods =</span> <span class="fu">map</span>(data, <span class="sc">~</span><span class="fu">lm</span>(lm_f, <span class="at">data =</span> .x)),</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>      <span class="at">coefs =</span> <span class="fu">map</span>(mods, coef),</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>      <span class="at">slope =</span> <span class="fu">map_dbl</span>(coefs, <span class="sc">~</span>.x[[slope_name]])</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>  osv <span class="ot">&lt;-</span> <span class="fu">var</span>(osv_df<span class="sc">$</span>slope)</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(tsv<span class="sc">/</span>osv)</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>test <span class="ot">&lt;-</span> slope_reliability <span class="sc">|&gt;</span></span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">function_test_slope_reliability_estimate =</span> <span class="fu">map_dbl</span>(tsv_mods, get_sr)</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;grade&quot;</span>,</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;subject&quot;</span>,</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;slope_reliability_estimate&quot;</span>,</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;function_test_slope_reliability_estimate&quot;</span></span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a>test</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div data-pagedtable="false">
+  <script data-pagedtable-source type="application/json">
+{"columns":[{"label":["grade"],"name":[1],"type":["int"],"align":["right"]},{"label":["subject"],"name":[2],"type":["chr"],"align":["left"]},{"label":["slope_reliability_estimate"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["function_test_slope_reliability_estimate"],"name":[4],"type":["dbl"],"align":["right"]}],"data":[{"1":"3","2":"math","3":"0.26728000","4":"0.26728000"},{"1":"3","2":"reading","3":"0.08552629","4":"0.08552629"},{"1":"4","2":"math","3":"0.14008104","4":"0.14008104"},{"1":"4","2":"reading","3":"0.14050818","4":"0.14050818"},{"1":"5","2":"math","3":"0.16063099","4":"0.16063099"},{"1":"5","2":"reading","3":"0.26342588","4":"0.26342588"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
+</div>
+</div>
 </section>
 <section id="confidence-interval-ci-20-points" class="level1">
 <h1>(5) 95% Confidence Interval (CI) (20 points)</h1>
