@@ -5,6 +5,9 @@ format:
   html:
     code-fold: true
     embed-resources: true
+    df-print: paged
+execute:
+  warning: false
 
 ---
 Dependencies
@@ -12,13 +15,106 @@ Dependencies
 library(tidyverse)
 library(purrr)
 library(httr)
-library()
+library(jsonlite)
+library(knitr)
+library(kableExtra)
+library(here)
+library(rio)
 ```
 
 # (1) API calls to chess.com (10 points)
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
 ```{r}
-1 + 1
+response <- GET('https://api.chess.com/pub/country/US/players')
+
+player_list <- fromJSON(rawToChar(response$content))$players
+
+check_null <- function(val) {
+  if(is.null(val)) {
+    return(NA)
+  }
+  return(val)
+}
+#info <- GET('https://api.chess.com/pub/player/--untouchable--')
+#fromJSON(rawToChar(info$content))
+
+#stats <- GET('https://api.chess.com/pub/player/--untouchable--/stats')
+#fromJSON(rawToChar(stats$content))
+
+x <- tibble(username = player_list[1:500]) |>
+  rowwise() |>
+  mutate(
+    info = list(
+      fromJSON(
+        rawToChar(
+          GET(paste0('https://api.chess.com/pub/player/', username))$content
+        )
+      )
+    ),
+    stats = list(
+      fromJSON(
+        rawToChar(
+          GET(paste0('https://api.chess.com/pub/player/', username, '/stats'))$content
+        )
+      )
+    ),
+    name                  = check_null(info$name),
+    `number of followers` = check_null(info$followers),
+    location              = check_null(info$location),
+    last_online           = as_datetime(check_null(info$last_online)),
+    rapid_last_rating     = check_null(stats$chess_rapid$last$rating),
+    rapid_best_rating     = check_null(stats$chess_rapid$best$rating),
+    rapid_record_win      = check_null(stats$chess_rapid$record$win),
+    rapid_record_loss     = check_null(stats$chess_rapid$record$loss),
+    rapid_record_draw     = check_null(stats$chess_rapid$record$draw)
+  ) |>
+  select(-info, -stats) 
+
+x
 ```
+
+# (2) Identify & Remove Duplicate Files (20 points)
+```{r}
+summ_deleted <- tibble(
+  retained = character(),
+  deleted_dup = character()
+)
+
+file_names <- list.files(
+  here("data"), 
+  include.dirs = FALSE,
+  recursive = TRUE,
+  full.names = TRUE
+)
+
+file_contents <- tibble(file_names) |>
+  rowwise() |>
+  mutate(
+    contents = list(import(file_names))
+  ) |> 
+  ungroup()
+
+for(i in 1:length(file_contents$file_names)){
+  for(j in (i+1):length(file_contents$file_names)){
+    if(identical(file_contents$contents[i], file_contents$contents[j])) {
+      summ_deleted <- summ_deleted |>
+        add_row(
+          retained = file_contents$file_names[i],
+          deleted_dup = file_contents$file_names[j]
+        )
+    }
+  }
+}
+
+row_number(summ_deleted)
+```
+
+# (3) Multiple Models (10 points)
+
+# (4) Slope Reliability Function (10 points)
+
+# (5) 95% Confidence Interval (CI) (20 points)
+
+
+
+quantile function for part 5, .025, .95
