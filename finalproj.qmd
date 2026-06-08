@@ -26,7 +26,6 @@ library(lme4)
 # (1) API calls to chess.com (10 points)
 
 ```{r}
-#| eval: false
 response <- GET('https://api.chess.com/pub/country/US/players')
 
 player_list <- fromJSON(rawToChar(response$content))$players
@@ -215,6 +214,134 @@ test
 ```
 
 # (5) 95% Confidence Interval (CI) (20 points)
+```{r}
+# returns the slope reliability estimate (dbl), adapted from above
+#
+# df: a dataframe containing data to be analyzed
+# grouping_var: string, name of grouping variable
+# time_var: string, name of time variable
+# outcome_var: string, name of outcome variable
+get_sr2 <- function(df, grouping_var, time_var, outcome_var) {
+
+  lmer_f <- as.formula(paste0(
+    outcome_var,
+    " ~ 1 + ",
+    time_var,
+    " + (1+",
+    time_var,
+    "|",
+    grouping_var,
+    ")"
+  ))
+  tsv_mod = lmer(lmer_f, REML = FALSE, data=df)
+  vc <- VarCorr(tsv_mod)[[1]]
+  tsv <- vc[time_var, time_var]
+  
+  # chatGPT recommended doing this, since directly substituting
+  # strings didn't work in the lm call below
+  # https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65
+  lm_f <- as.formula(paste0(outcome_var, " ~ 1+ ", time_var))
+  
+  osv_df <- df |>
+    # asked ChatGPT how to group_by a string object's value:
+    # https://chatgpt.com/share/6a25f818-d0b4-83e8-a19b-af4a05e11c65
+    group_by(across(all_of(grouping_var))) |> 
+    nest() |>
+    mutate(
+      mods = map(data, ~lm(lm_f, data = .x)),
+      coefs = map(mods, coef),
+      slope = map_dbl(coefs, ~.x[[time_var]])
+    )
+  
+  osv <- var(osv_df$slope)
+
+  return(tsv/osv)
+
+}
+
+# much of the layout of make_df_sample and bootstrapper was recommended by 
+# ChatGPT after essentially copying the part 5 prompt (initially, to help my 
+# reading comprehension for the sample sizes)
+# See prompts: https://chatgpt.com/share/6a264766-b060-83e8-86ac-026841d837be
+
+# creates a single bootstrap sample df with data and sample-specific ids
+# 
+# df: the dataframe to make the sample from
+# grouping_var: string, the grouping variable name 
+make_df_sample <- function(df, grouping_var) {
+  # get unique grouping_var values (sids)
+  ids <- unique(df[[grouping_var]])
+  
+  # select a bootstrap sample of ids
+  boot_ids <- sample(
+    x = ids,
+    size = length(ids),
+    replace = TRUE
+  )
+  
+  # return df with new sample-specific ids
+  map2_dfr(
+    boot_ids,
+    seq_along(boot_ids),
+    ~ {
+      df |>
+        filter(.data[[grouping_var]] == .x) |>
+        mutate(boot_id = .y)
+    }
+  )
+  
+}
+
+# function that returns a vector of slope reliability estimates
+# for bootstrapped samples
+#
+# df: a dataframe containing data to be analyzed
+# grouping_var: string, name of grouping variable
+# time_var: string, name of time variable
+# outcome_var: string, name of outcome variable
+# n: int, number of bootstrap samples to take
+bootstrapper <- function(df, grouping_var, time_var, outcome_var, n = 100) {
+
+  
+  boot_reliabilities <- map_dbl(
+    1:n, 
+    ~{
+      boot_df <- make_df_sample(df, grouping_var)
+      
+      get_sr2(boot_df, "boot_id", time_var, outcome_var)
+    }
+  )
+  
+  boot_reliabilities
+}
+
+final_table <- slope_reliability |>
+  mutate(
+    boot_reliability_samples = map(
+      data, 
+      ~bootstrapper(.x, "sid", "wave", "score", n = 100)
+    ),
+    quantiles = map(
+      boot_reliability_samples, 
+      ~quantile(.x, probs = c(.025, .5, .975), na.rm = TRUE)
+    ),
+    n_size = map_dbl(data, ~length(unique(.x[["sid"]]))),
+    CI_95_lower_bound = map_dbl(quantiles, ~.x[['2.5%']]),
+    CI_95_upper_bound = map_dbl(quantiles, ~.x[['97.5%']]),
+    median_sr_est     = map_dbl(quantiles, ~.x[['50%']])
+  ) |>
+  select(
+    grade,
+    subject,
+    n_size,
+    CI_95_lower_bound,
+    CI_95_upper_bound,
+    median_sr_est
+  )
+
+final_table
+
+```
 
 
 
